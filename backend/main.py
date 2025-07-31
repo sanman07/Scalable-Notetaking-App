@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 dotenv.load_dotenv()
 
 # Example SQL Server connection string for interactive AAD login:
-DATABASE_URL = os.getenv("DATABASE_URL")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://notesuser:notespassword@localhost:5432/notesdb")
 
 engine = create_async_engine(DATABASE_URL, echo=True)
 async_session = async_sessionmaker(engine, expire_on_commit=False)
@@ -189,3 +189,18 @@ async def delete_folder(folder_id: int, session: AsyncSession = Depends(get_sess
     await session.delete(db_folder)
     await session.commit()
     return None
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for Docker and Kubernetes"""
+    try:
+        # Test database connection
+        async with async_session() as session:
+            await session.execute(select(1))
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Database connection failed: {str(e)}")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)

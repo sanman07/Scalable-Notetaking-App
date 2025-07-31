@@ -1,0 +1,63 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: notes-app-development
+
+namespace: notes-app-dev
+
+namePrefix: dev-
+
+commonLabels:
+  environment: development
+
+bases:
+  - ../../base
+
+patches:
+  - target:
+      kind: Deployment
+      name: backend-deployment
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "128Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "256Mi"
+  
+  - target:
+      kind: Deployment
+      name: frontend-deployment
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: backend-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3
+
+  - target:
+      kind: PersistentVolumeClaim
+      name: postgres-pvc
+    patch: |-
+      - op: replace
+        path: /spec/resources/requests/storage
+        value: "1Gi"
+
+images:
+  - name: notes-backend
+    newTag: dev
+  - name: notes-frontend
+    newTag: dev 

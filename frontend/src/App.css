@@ -311,8 +311,8 @@ body.dark .chip.active {
   gap: 0.5rem;
   padding: 0.75rem 1rem;
   background: #f8fafc;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
   transition: all 0.2s ease;
   font-size: 0.875rem;
   font-weight: 600;
@@ -322,14 +322,14 @@ body.dark .chip.active {
 .folder-header:hover {
   background: #f1f5f9;
   border-color: #d1d5db;
-}
-
+  }
+  
 .folder-header.root-folder {
   background: #eff6ff;
   border-color: #dbeafe;
   color: #1d4ed8;
-}
-
+  }
+  
 .folder-main {
   display: flex;
   align-items: center;
@@ -347,8 +347,8 @@ body.dark .chip.active {
 
 .folder-section:hover .folder-actions {
   opacity: 1;
-}
-
+  }
+  
 .folder-edit-btn,
 .folder-delete-btn,
 .folder-add-sub-btn {
@@ -366,12 +366,12 @@ body.dark .chip.active {
   
 .folder-add-sub-btn {
   font-size: 0.75rem;
-}
-
-.folder-add-sub-btn:hover {
-  background: #e0f2fe;
   }
   
+.folder-add-sub-btn:hover {
+  background: #e0f2fe;
+}
+
 .folder-edit-btn:hover {
   background: #f3f4f6;
 }
@@ -382,15 +382,15 @@ body.dark .chip.active {
   
 body.dark .folder-add-sub-btn:hover {
   background: #0c4a6e;
-  }
-  
+}
+
 body.dark .folder-edit-btn:hover {
   background: #374151;
-  }
+}
 
 body.dark .folder-delete-btn:hover {
   background: #451a1a;
-  }
+}
 
 .folder-toggle {
   font-size: 1rem;
@@ -813,15 +813,15 @@ body.dark .recent-tag {
 
 .rich-text-editor-content:focus[data-placeholder]:empty::before {
   opacity: 0.7;
-}
-
+  }
+  
 /* Ensure contentEditable styling */
 .rich-text-editor-content {
   font-family: "JetBrains Mono", "SF Mono", "Consolas", "DejaVu Sans Mono", monospace !important;
   font-size: 15px !important;
   line-height: 1.6 !important;
   min-height: 300px;
-  padding: 1rem;
+    padding: 1rem;
   border: 2px solid #e2e8f0;
   border-radius: 8px;
   outline: none;
@@ -906,7 +906,7 @@ body.dark .recent-tag {
   font-family: 'Inter', system-ui, sans-serif !important;
   margin: -1rem -1rem 0 -1rem !important;
   border-radius: 7px 7px 0 0 !important;
-}
+  }
 
 .rich-text-editor-content pre code {
   font-family: "JetBrains Mono", "SF Mono", "Consolas", monospace !important;

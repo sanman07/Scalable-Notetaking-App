@@ -1,0 +1,70 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database (replacing SQL Server for better Docker support)
+  database:
+    image: postgres:15-alpine
+    container_name: notes-database
+    environment:
+      POSTGRES_USER: notesuser
+      POSTGRES_PASSWORD: notespassword
+      POSTGRES_DB: notesdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notesuser -d notesdb"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - notes-network
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: notes-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://notesuser:notespassword@database:5432/notesdb
+      ENVIRONMENT: production
+    ports:
+      - "8000:8000"
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./backend:/app
+    networks:
+      - notes-network
+    restart: unless-stopped
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: notes-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - notes-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  notes-network:
+    driver: bridge 

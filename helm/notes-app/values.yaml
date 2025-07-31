@@ -1,0 +1,227 @@
+# Default values for notes-app
+# This is a YAML-formatted file
+
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: ""
+
+# Application configuration
+app:
+  name: notes-app
+  version: "1.0.0"
+
+# Frontend configuration
+frontend:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: notes-frontend
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 80
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  livenessProbe:
+    httpGet:
+      path: /
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+
+# Backend configuration
+backend:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: notes-backend
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  env:
+    ENVIRONMENT: production
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 30
+    periodSeconds: 10
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+  # Horizontal Pod Autoscaler
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+# Database configuration
+database:
+  # Use external PostgreSQL (set to false to use built-in postgresql chart)
+  external: false
+  host: postgres-service
+  port: 5432
+  name: notesdb
+  username: notesuser
+  # Password will be generated or provided via secret
+  existingSecret: ""
+  existingSecretPasswordKey: ""
+
+# PostgreSQL subchart configuration (when database.external = false)
+postgresql:
+  enabled: true
+  auth:
+    postgresPassword: "postgres"
+    username: "notesuser"
+    password: "notespassword"
+    database: "notesdb"
+  architecture: standalone
+  primary:
+    persistence:
+      enabled: true
+      size: 5Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+    initdb:
+      scripts:
+        init.sql: |
+          -- Initialize PostgreSQL database for Notes Application
+
+          -- Create folders table
+          CREATE TABLE IF NOT EXISTS folders (
+              id SERIAL PRIMARY KEY,
+              name VARCHAR(100) NOT NULL,
+              color VARCHAR(20),
+              icon VARCHAR(10) DEFAULT '📁',
+              parent_id INTEGER REFERENCES folders(id) ON DELETE SET NULL
+          );
+
+          -- Create notes table
+          CREATE TABLE IF NOT EXISTS notes (
+              id SERIAL PRIMARY KEY,
+              title VARCHAR(200) NOT NULL,
+              content TEXT,
+              tags TEXT[],
+              color VARCHAR(20) DEFAULT '#6366f1',
+              folder_id INTEGER REFERENCES folders(id) ON DELETE SET NULL,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          );
+
+          -- Create indexes for better performance
+          CREATE INDEX IF NOT EXISTS idx_notes_folder_id ON notes(folder_id);
+          CREATE INDEX IF NOT EXISTS idx_notes_title ON notes(title);
+          CREATE INDEX IF NOT EXISTS idx_folders_parent_id ON folders(parent_id);
+
+          -- Insert some sample data
+          INSERT INTO folders (name, color, icon) VALUES 
+              ('Work', '#6366f1', '💼'),
+              ('Personal', '#ec4899', '🏠'),
+              ('Projects', '#10b981', '🚀')
+          ON CONFLICT DO NOTHING;
+
+          INSERT INTO notes (title, content, tags, color, folder_id) VALUES 
+              ('Welcome to Notes App', 'This is your first note! You can use <strong>rich text formatting</strong> and organize notes in folders.', ARRAY['welcome', 'getting-started'], '#6366f1', 1),
+              ('Meeting Notes', 'Key points from today''s meeting:<br/>• Review project timeline<br/>• Discuss budget allocation<br/>• Plan next quarter', ARRAY['meeting', 'work'], '#ec4899', 1)
+          ON CONFLICT DO NOTHING;
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  hosts:
+    - host: notes.local
+      paths:
+        - path: /api
+          pathType: Prefix
+          service: backend
+        - path: /
+          pathType: Prefix
+          service: frontend
+  tls: []
+  # Example TLS configuration:
+  # tls:
+  #   - secretName: notes-tls
+  #     hosts:
+  #       - notes.yourdomain.com
+
+# Service Account
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  name: ""
+
+# Pod Security Context
+podSecurityContext:
+  fsGroup: 2000
+
+# Container Security Context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Pod Disruption Budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Network Policies
+networkPolicy:
+  enabled: false
+  ingress: []
+  egress: [] 

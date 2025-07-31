@@ -630,7 +630,7 @@ const NoteForm: React.FC<NoteFormProps> = ({ onSubmit, editingNote, folders }) =
 
   const handleTagInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && tagInput.trim()) {
-            e.preventDefault();
+      e.preventDefault();
       if (!tags.includes(tagInput.trim())) {
         setTags([...tags, tagInput.trim()]);
       }

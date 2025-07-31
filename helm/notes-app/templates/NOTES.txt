@@ -1,0 +1,57 @@
+1. Get the application URL by running these commands:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+  {{- range .paths }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
+  {{- end }}
+{{- end }}
+{{- else if contains "NodePort" .Values.frontend.service.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "notes-app.fullname" . }}-frontend)
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "LoadBalancer" .Values.frontend.service.type }}
+     NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+           You can watch the status of by running 'kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "notes-app.fullname" . }}-frontend'
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "notes-app.fullname" . }}-frontend --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+  echo http://$SERVICE_IP:{{ .Values.frontend.service.port }}
+{{- else if contains "ClusterIP" .Values.frontend.service.type }}
+  export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "notes-app.name" . }},app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=frontend" -o jsonpath="{.items[0].metadata.name}")
+  export CONTAINER_PORT=$(kubectl get pod --namespace {{ .Release.Namespace }} $POD_NAME -o jsonpath="{.spec.containers[0].ports[0].containerPort}")
+  echo "Visit http://127.0.0.1:8080 to use your application"
+  kubectl --namespace {{ .Release.Namespace }} port-forward $POD_NAME 8080:$CONTAINER_PORT
+{{- end }}
+
+2. Database Information:
+{{- if .Values.database.external }}
+   Using external database: {{ .Values.database.host }}:{{ .Values.database.port }}/{{ .Values.database.name }}
+{{- else }}
+   Using PostgreSQL subchart
+   Database Host: {{ include "notes-app.database.host" . }}
+   Database Name: {{ .Values.database.name }}
+   Database User: {{ .Values.database.username }}
+{{- end }}
+
+3. Components Deployed:
+{{- if .Values.frontend.enabled }}
+   ✓ Frontend ({{ .Values.frontend.replicaCount }} replicas)
+{{- end }}
+{{- if .Values.backend.enabled }}
+   ✓ Backend ({{ .Values.backend.replicaCount }} replicas)
+   {{- if .Values.backend.autoscaling.enabled }}
+   ✓ Horizontal Pod Autoscaler ({{ .Values.backend.autoscaling.minReplicas }}-{{ .Values.backend.autoscaling.maxReplicas }} replicas)
+   {{- end }}
+{{- end }}
+{{- if .Values.postgresql.enabled }}
+   ✓ PostgreSQL Database
+{{- end }}
+{{- if .Values.ingress.enabled }}
+   ✓ Ingress Controller
+{{- end }}
+
+4. Monitoring:
+   To check the status of your deployment:
+   kubectl get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+   
+   To view logs:
+   kubectl logs -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=backend
+   kubectl logs -l app.kubernetes.io/instance={{ .Release.Name }},app.kubernetes.io/component=frontend

@@ -1,0 +1,117 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  database:
+    image: postgres:15-alpine
+    container_name: notes-microservices-database
+    environment:
+      POSTGRES_USER: notesuser
+      POSTGRES_PASSWORD: notespassword
+      POSTGRES_DB: notesdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notesuser -d notesdb"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - microservices-network
+
+  # Notes Service
+  notes-service:
+    build:
+      context: ./notes-service
+      dockerfile: Dockerfile
+    container_name: notes-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://notesuser:notespassword@database:5432/notesdb
+      ENVIRONMENT: production
+    ports:
+      - "8001:8001"
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - microservices-network
+    restart: unless-stopped
+
+  # Folders Service
+  folders-service:
+    build:
+      context: ./folders-service
+      dockerfile: Dockerfile
+    container_name: folders-service
+    environment:
+      DATABASE_URL: postgresql+asyncpg://notesuser:notespassword@database:5432/notesdb
+      ENVIRONMENT: production
+    ports:
+      - "8002:8002"
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - microservices-network
+    restart: unless-stopped
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    environment:
+      NOTES_SERVICE_URL: http://notes-service:8001
+      FOLDERS_SERVICE_URL: http://folders-service:8002
+      ENVIRONMENT: production
+    ports:
+      - "8000:8000"
+    depends_on:
+      notes-service:
+        condition: service_healthy
+      folders-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - microservices-network
+    restart: unless-stopped
+
+  # Frontend (React App)
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: notes-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      api-gateway:
+        condition: service_healthy
+    networks:
+      - microservices-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  microservices-network:
+    driver: bridge 

@@ -22,6 +22,10 @@ A modern, scalable note-taking application built with microservices architecture
 - 📊 **Comprehensive Monitoring Stack**
 - 🐳 **Microservices Architecture**
 - ☸️ **Kubernetes-ready with Helm charts**
+- 🔧 **Multi-environment deployment** (Dev/Prod)
+- 📈 **Auto-scaling with HPA**
+- 🌐 **Ingress-based routing**
+- 🔄 **CI/CD ready**
 
 ## Architecture
 
@@ -59,9 +63,12 @@ A modern, scalable note-taking application built with microservices architecture
 │   ├── shared/        # Shared utilities and models
 │   └── init.sql       # Database initialization
 ├── monitoring/        # Prometheus & Grafana setup
-├── helm/              # Helm charts for Kubernetes deployment
-├── k8s/               # Kubernetes manifests
-├── scripts/           # Deployment and utility scripts
+├── k8s/              # Kubernetes manifests (Kustomize)
+│   ├── base/         # Base Kubernetes resources
+│   └── overlays/     # Environment-specific configs
+├── helm/             # Helm charts for Kubernetes deployment
+│   └── notes-app/    # Main Helm chart
+├── scripts/          # Deployment and utility scripts
 ├── docker-compose.yml # Local development setup
 └── SECURITY.md       # Comprehensive security documentation
 ```
@@ -140,6 +147,128 @@ pip install -r requirements.txt
 python main.py
 # Backend will be available at http://localhost:8000
 ```
+
+### Option 4: Kubernetes Deployment
+
+#### Prerequisites
+- **Kubernetes cluster** (Minikube, GKE, EKS, AKS, etc.)
+- **kubectl** configured to connect to your cluster
+- **Docker** for building images
+- **kustomize** (usually included with kubectl)
+- **Helm** 3.0+ (for Helm deployment)
+
+#### Option 4A: Kustomize Deployment (Recommended for simplicity)
+
+1. **Build and push images**
+   ```bash
+   # Build images with your registry
+   ./scripts/build-images.sh v1.0.0 your-registry.com/your-project
+   ```
+
+2. **Deploy to development**
+   ```bash
+   # Deploy to development environment
+   kubectl apply -k k8s/overlays/development
+   
+   # Or use the deployment script
+   ./scripts/deploy-k8s.sh development
+   ```
+
+3. **Deploy to production**
+   ```bash
+   # Deploy to production environment
+   kubectl apply -k k8s/overlays/production
+   
+   # Or use the deployment script
+   ./scripts/deploy-k8s.sh production
+   ```
+
+4. **Access the application**
+   ```bash
+   # Port forward to access locally
+   kubectl port-forward service/dev-frontend-service 8080:80 -n notes-app-dev
+   
+   # Access via ingress (if configured)
+   echo "127.0.0.1 notes.local" >> /etc/hosts
+   curl http://notes.local
+   ```
+
+#### Option 4B: Helm Deployment (Recommended for production)
+
+1. **Build and push images**
+   ```bash
+   # Build images with your registry
+   ./scripts/build-images.sh v1.0.0 your-registry.com/your-project
+   ```
+
+2. **Install with Helm**
+   ```bash
+   # Install with default values
+   helm install notes-app ./helm/notes-app --namespace notes-app
+   
+   # Or use the install script
+   ./helm/install.sh my-release my-namespace
+   ```
+
+3. **Upgrade with new version**
+   ```bash
+   # Upgrade to new version
+   helm upgrade notes-app ./helm/notes-app --set app.version=v1.1.0
+   ```
+
+4. **Access the application**
+   ```bash
+   # Port forward to access locally
+   kubectl port-forward -n notes-app svc/notes-app-notes-app-frontend 8080:80
+   
+   # Access via configured domain
+   curl https://notes.yourdomain.com
+   ```
+
+#### Kubernetes Architecture
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Ingress       │    │   Frontend      │    │   Backend       │
+│   (NGINX)       │───▶│   (React)       │───▶│   (FastAPI)     │
+│   Port: 80/443  │    │   Port: 80      │    │   Port: 8000    │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+                                                        │
+                                                        ▼
+                                               ┌─────────────────┐
+                                               │   Database      │
+                                               │   (PostgreSQL)  │
+                                               │   Port: 5432    │
+                                               └─────────────────┘
+```
+
+#### Kubernetes Resources
+- **Namespace**: Isolates the application
+- **Deployments**: Application workloads (Frontend, Backend, Database)
+- **Services**: Internal networking
+- **ConfigMaps**: Non-sensitive configuration
+- **Secrets**: Database credentials
+- **PersistentVolumeClaim**: Database storage
+- **Ingress**: External access
+- **HorizontalPodAutoscaler**: Auto-scaling
+
+#### Monitoring and Scaling
+```bash
+# Check deployment status
+kubectl get pods -n notes-app
+
+# View logs
+kubectl logs -f deployment/backend-deployment -n notes-app
+
+# Manual scaling
+kubectl scale deployment/backend-deployment --replicas=5 -n notes-app
+
+# Check HPA status
+kubectl get hpa -n notes-app
+```
+
+For detailed Kubernetes deployment instructions, see:
+- **Kustomize Guide**: [k8s/README.md](k8s/README.md)
+- **Helm Guide**: [helm/notes-app/README.md](helm/notes-app/README.md)
 
 ## API Endpoints
 

@@ -1,8 +1,25 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime
-from sqlalchemy.orm import declarative_base, relationship
-from sqlalchemy.sql import func
+"""
+Shared database models for microservices
+"""
+
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Boolean
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
+from datetime import datetime
 
 Base = declarative_base()
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(50), unique=True, index=True, nullable=False)
+    email = Column(String(100), unique=True, index=True, nullable=False)
+    hashed_password = Column(String(255), nullable=False)
+    full_name = Column(String(100), nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    last_login = Column(DateTime, nullable=True)
 
 class Folder(Base):
     __tablename__ = "folders"
@@ -12,8 +29,9 @@ class Folder(Base):
     color = Column(String(20), nullable=True)
     icon = Column(String(10), nullable=True, default="📁")
     parent_id = Column(Integer, ForeignKey("folders.id"), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     notes = relationship("Note", back_populates="folder")
@@ -24,13 +42,14 @@ class Note(Base):
     __tablename__ = "notes"
     
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String(200), nullable=False)
+    title = Column(String(100), nullable=False)
     content = Column(Text, nullable=True)
-    tags = Column(String(500), nullable=True)  # JSON string or comma-separated
-    color = Column(String(20), nullable=True, default="#6366f1")
+    tags = Column(String(250), nullable=True)
+    color = Column(String(20), nullable=True)
     folder_id = Column(Integer, ForeignKey("folders.id"), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     folder = relationship("Folder", back_populates="notes") 

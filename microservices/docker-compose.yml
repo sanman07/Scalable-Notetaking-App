@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   database:
@@ -25,9 +23,9 @@ services:
   # Notes Service
   notes-service:
     build:
-      context: ./notes-service
-      dockerfile: Dockerfile
-    container_name: notes-service
+      context: .
+      dockerfile: notes-service/Dockerfile
+    container_name: microservices-notes-service
     environment:
       DATABASE_URL: postgresql+asyncpg://notesuser:notespassword@database:5432/notesdb
       ENVIRONMENT: production
@@ -48,9 +46,9 @@ services:
   # Folders Service
   folders-service:
     build:
-      context: ./folders-service
-      dockerfile: Dockerfile
-    container_name: folders-service
+      context: .
+      dockerfile: folders-service/Dockerfile
+    container_name: microservices-folders-service
     environment:
       DATABASE_URL: postgresql+asyncpg://notesuser:notespassword@database:5432/notesdb
       ENVIRONMENT: production
@@ -71,12 +69,12 @@ services:
   # API Gateway
   api-gateway:
     build:
-      context: ./api-gateway
-      dockerfile: Dockerfile
-    container_name: api-gateway
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: microservices-api-gateway
     environment:
-      NOTES_SERVICE_URL: http://notes-service:8001
-      FOLDERS_SERVICE_URL: http://folders-service:8002
+      NOTES_SERVICE_URL: http://microservices-notes-service:8001
+      FOLDERS_SERVICE_URL: http://microservices-folders-service:8002
       ENVIRONMENT: production
     ports:
       - "8000:8000"
@@ -99,7 +97,7 @@ services:
     build:
       context: ../frontend
       dockerfile: Dockerfile
-    container_name: notes-frontend
+    container_name: microservices-frontend
     ports:
       - "80:80"
     depends_on:

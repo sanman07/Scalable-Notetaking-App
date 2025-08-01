@@ -119,7 +119,7 @@ const NoteForm: React.FC<NoteFormProps> = ({ onSubmit, editingNote, folders }) =
     }
   }, [content, editorRef]);
 
-  const getCaretPosition = (element: HTMLDivElement) => {
+  const getCaretPosition = () => {
     const selection = window.getSelection();
     if (!selection || !selection.rangeCount) return { x: 0, y: 0 };
     
@@ -293,7 +293,7 @@ const NoteForm: React.FC<NoteFormProps> = ({ onSubmit, editingNote, folders }) =
     } else if (e.key === '/') {
       // Show menu after the slash is typed
       setTimeout(() => {
-        const position = getCaretPosition(element);
+        const position = getCaretPosition();
         setSlashMenuPosition({
           top: position.y,
           left: position.x

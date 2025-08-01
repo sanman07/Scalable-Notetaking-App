@@ -4,12 +4,12 @@
 A modern, scalable note-taking application built with microservices architecture:
 
 - **Frontend:** React (Vite + TypeScript) with rich text editor
-- **Backend:** Python (FastAPI) with async database operations
+- **Backend:** Python (FastAPI) microservices with async database operations
 - **Database:** PostgreSQL with connection pooling
-- **Orchestration:** Docker, Kubernetes, Helm
-- **Ingress:** NGINX Ingress Controller
-- **Secrets:** Kubernetes Secrets
-- **Monitoring:** Prometheus & Grafana (optional)
+- **API Gateway:** FastAPI-based routing and load balancing
+- **Orchestration:** Docker Compose for local development
+- **Monitoring:** Prometheus, Grafana, Jaeger, Loki (optional)
+- **Security:** JWT Authentication, Rate Limiting, CORS Protection
 
 ## Features
 - 📝 Rich text editing with markdown support
@@ -17,31 +17,61 @@ A modern, scalable note-taking application built with microservices architecture
 - 📱 Responsive design for all devices
 - 🚀 Fast API responses with async operations
 - 🔒 Secure database connections
-- 📊 Optional monitoring and metrics
-- 🐳 Containerized deployment
-- ☸️ Kubernetes-ready with Helm charts
+- 🔐 **JWT Authentication & Authorization**
+- 🛡️ **Rate Limiting & Security Headers**
+- 📊 **Comprehensive Monitoring Stack**
+- 🐳 **Microservices Architecture**
+- ☸️ **Kubernetes-ready with Helm charts**
+
+## Architecture
+
+### Microservices
+- **Frontend Service**: React app with NGINX
+- **API Gateway**: Routes requests to microservices
+- **Notes Service**: Handles note CRUD operations
+- **Folders Service**: Manages folder organization
+- **Database Service**: PostgreSQL with persistent storage
+
+### Monitoring Stack (Optional)
+- **Grafana**: Dashboard and visualization
+- **Prometheus**: Metrics collection and alerting
+- **Jaeger**: Distributed tracing
+- **Loki**: Log aggregation
+- **Node Exporter**: System metrics
+
+## Security Features
+- **JWT Token Authentication** with access and refresh tokens
+- **Password Security** with bcrypt hashing and strength validation
+- **Rate Limiting** to prevent abuse (100 requests/minute)
+- **Security Headers** (CSP, XSS Protection, etc.)
+- **CORS Protection** with configurable origins
+- **Input Validation** for all user inputs
+- **User Data Isolation** - users can only access their own data
+- **SQL Injection Protection** with parameterized queries
 
 ## Project Structure
 ```
 ├── frontend/          # React + Vite app with TypeScript
-├── backend/           # FastAPI app with async SQLAlchemy
-├── helm/              # Helm charts for Kubernetes deployment
-│   └── notes-app/
-├── k8s/               # Kubernetes manifests
+├── microservices/     # Microservices architecture
+│   ├── api-gateway/   # API Gateway service
+│   ├── notes-service/ # Notes management service
+│   ├── folders-service/ # Folder organization service
+│   ├── shared/        # Shared utilities and models
+│   └── init.sql       # Database initialization
 ├── monitoring/        # Prometheus & Grafana setup
+├── helm/              # Helm charts for Kubernetes deployment
+├── k8s/               # Kubernetes manifests
 ├── scripts/           # Deployment and utility scripts
-├── db/               # Database initialization scripts
 ├── docker-compose.yml # Local development setup
-└── docker.env.example # Environment variables template
+└── SECURITY.md       # Comprehensive security documentation
 ```
 
 ## Prerequisites
 
 ### For Local Development
-- **Docker & Docker Compose** (recommended)
+- **Docker & Docker Compose** (required)
 - **Node.js** 18+ (for frontend development)
 - **Python** 3.9+ (for backend development)
-- **PostgreSQL** 15+ (if running locally)
 
 ### For Production Deployment
 - **Kubernetes** cluster (1.20+)
@@ -51,7 +81,7 @@ A modern, scalable note-taking application built with microservices architecture
 
 ## Quick Start
 
-### Option 1: Docker Compose (Recommended for Development)
+### Option 1: Microservices with Docker Compose (Recommended)
 
 1. **Clone the repository**
    ```bash
@@ -59,23 +89,39 @@ A modern, scalable note-taking application built with microservices architecture
    cd Scalable-Notetaking-App
    ```
 
-2. **Set up environment variables**
+2. **Start the microservices**
    ```bash
-   cp docker.env.example docker.env
-   # Edit docker.env with your preferred settings
+   cd microservices
+   sh start-microservices.sh
    ```
 
-3. **Start the application**
-   ```bash
-   docker-compose up -d
-   ```
-
-4. **Access the application**
+3. **Access the application**
    - Frontend: http://localhost
-   - Backend API: http://localhost:8000
+   - API Gateway: http://localhost:8000
+   - Notes Service: http://localhost:8001
+   - Folders Service: http://localhost:8002
    - API Documentation: http://localhost:8000/docs
 
-### Option 2: Local Development
+### Option 2: With Monitoring Stack
+
+1. **Start microservices first**
+   ```bash
+   cd microservices
+   sh start-microservices.sh
+   ```
+
+2. **Start monitoring stack**
+   ```bash
+   cd monitoring
+   sh start-monitoring.sh
+   ```
+
+3. **Access monitoring dashboards**
+   - Grafana: http://localhost:3000 (admin/admin)
+   - Prometheus: http://localhost:9090
+   - Jaeger: http://localhost:16686
+
+### Option 3: Local Development
 
 #### Frontend Setup
 ```bash
@@ -95,70 +141,64 @@ python main.py
 # Backend will be available at http://localhost:8000
 ```
 
-#### Database Setup
-```bash
-# Install PostgreSQL locally or use Docker
-docker run -d \
-  --name postgres \
-  -e POSTGRES_USER=notesuser \
-  -e POSTGRES_PASSWORD=notespassword \
-  -e POSTGRES_DB=notesdb \
-  -p 5432:5432 \
-  postgres:15-alpine
-```
+## API Endpoints
 
-### Option 3: Kubernetes Deployment
+### Application Services
+- **Frontend**: http://localhost
+- **API Gateway**: http://localhost:8000
+- **Notes Service**: http://localhost:8001
+- **Folders Service**: http://localhost:8002
 
-1. **Add the Helm repository**
-   ```bash
-   helm repo add notes-app https://your-helm-repo-url
-   helm repo update
-   ```
+### API Documentation
+- **Gateway Docs**: http://localhost:8000/docs
+- **Notes Docs**: http://localhost:8001/docs
+- **Folders Docs**: http://localhost:8002/docs
 
-2. **Install the application**
-   ```bash
-   helm install notes-app ./helm/notes-app
-   ```
+### Health Checks
+- **Gateway Health**: http://localhost:8000/health
+- **Notes Health**: http://localhost:8001/health
+- **Folders Health**: http://localhost:8002/health
 
-3. **Access the application**
-   - Frontend: http://your-cluster-ip
-   - Backend API: http://your-cluster-ip/api
+## Monitoring Endpoints
+
+### Monitoring Stack (Optional)
+- **Grafana**: http://localhost:3000 (admin/admin)
+- **Prometheus**: http://localhost:9090
+- **Jaeger**: http://localhost:16686
+- **Loki**: http://localhost:3100
+- **Node Exporter**: http://localhost:9100
 
 ## Configuration
 
 ### Environment Variables
 
-Create a `.env` file in the root directory:
+The application uses environment variables for configuration. Key variables:
 
 ```env
 # Database Configuration
-DATABASE_URL=postgresql+asyncpg://notesuser:notespassword@localhost:5432/notesdb
+DATABASE_URL=postgresql+asyncpg://notesuser:notespassword@database:5432/notesdb
 POSTGRES_USER=notesuser
 POSTGRES_PASSWORD=notespassword
 POSTGRES_DB=notesdb
 
-# Backend Configuration
-ENVIRONMENT=development
-API_HOST=0.0.0.0
-API_PORT=8000
+# Service Configuration
+NOTES_SERVICE_URL=http://notes-service:8001
+FOLDERS_SERVICE_URL=http://folders-service:8002
 
-# Frontend Configuration
-VITE_API_URL=http://localhost:8000
+# Security Configuration
+SECRET_KEY=your-super-secret-key-change-this-in-production
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_DAYS=7
 ```
 
-### Docker Configuration
+### Docker Services
 
-The application uses Docker Compose with the following services:
+The microservices stack includes:
 - **Database**: PostgreSQL 15 with persistent storage
-- **Backend**: FastAPI with health checks
+- **API Gateway**: FastAPI routing and load balancing
+- **Notes Service**: Note CRUD operations
+- **Folders Service**: Folder management
 - **Frontend**: React app served by NGINX
-
-## API Documentation
-
-Once the backend is running, you can access:
-- **Interactive API docs**: http://localhost:8000/docs
-- **ReDoc documentation**: http://localhost:8000/redoc
-- **OpenAPI schema**: http://localhost:8000/openapi.json
 
 ## Development
 
@@ -171,57 +211,82 @@ npm run lint         # Run ESLint
 npm run preview      # Preview production build
 ```
 
-### Backend Development
+### Microservices Development
 ```bash
-cd backend
-python main.py       # Run development server
-python migrate_db.py # Run database migrations
+cd microservices
+docker-compose up -d  # Start all services
+docker-compose logs   # View logs
+docker-compose down   # Stop services
 ```
 
-### Database Migrations
-```bash
-cd backend
-python migrate_db.py
-```
-
-## Monitoring (Optional)
-
-The application includes optional monitoring with Prometheus and Grafana:
-
+### Monitoring Development
 ```bash
 cd monitoring
-docker-compose up -d
+docker-compose up -d  # Start monitoring stack
+docker-compose logs   # View monitoring logs
 ```
-
-Access monitoring dashboards:
-- **Grafana**: http://localhost:3000 (admin/admin)
-- **Prometheus**: http://localhost:9090
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Database connection errors**
-   - Ensure PostgreSQL is running
-   - Check database credentials in environment variables
-   - Verify database port (5432) is accessible
+1. **Port conflicts**
+   - Ensure ports 80, 8000, 8001, 8002 are available
+   - Check for existing containers: `docker ps`
 
-2. **Frontend not loading**
-   - Check if backend API is running
-   - Verify API URL in frontend configuration
-   - Check browser console for errors
+2. **Container name conflicts**
+   - Remove existing containers: `docker rm -f <container-name>`
+   - Restart services: `docker-compose up -d`
 
-3. **Docker issues**
-   - Ensure Docker and Docker Compose are installed
-   - Check if ports 80 and 8000 are available
-   - Run `docker-compose logs` for detailed error messages
+3. **Database connection errors**
+   - Check database container is running: `docker ps | grep database`
+   - Verify database health: `curl http://localhost:8000/health`
+
+4. **Frontend not loading**
+   - Check API Gateway is running: `curl http://localhost:8000/health`
+   - Verify NGINX configuration in frontend container
+
+5. **Monitoring not working**
+   - Check monitoring containers: `docker ps | grep monitoring`
+   - Verify ports 3000, 9090, 16686 are available
 
 ### Health Checks
 
-The application includes health checks for all services:
-- **Backend**: `GET /health`
+All services include health checks:
+- **API Gateway**: `GET /health`
+- **Notes Service**: `GET /health`
+- **Folders Service**: `GET /health`
 - **Database**: PostgreSQL connection test
-- **Frontend**: NGINX status
+
+### Logs and Debugging
+
+```bash
+# View all service logs
+docker-compose logs
+
+# View specific service logs
+docker-compose logs api-gateway
+docker-compose logs notes-service
+docker-compose logs frontend
+
+# Monitor logs in real-time
+docker-compose logs -f
+```
+
+## Security Testing
+
+### Run Authentication Tests
+```bash
+cd backend
+python test_auth.py
+```
+
+This will test:
+- User registration with validation
+- Login with valid/invalid credentials
+- Protected endpoint access
+- Token refresh functionality
+- Unauthorized access prevention
 
 ## Contributing
 
@@ -230,6 +295,10 @@ The application includes health checks for all services:
 3. Make your changes
 4. Add tests if applicable
 5. Submit a pull request
+
+## Security
+
+For security issues, please refer to [SECURITY.md](SECURITY.md) for comprehensive security documentation and contact information.
 
 ## License
 
@@ -240,4 +309,5 @@ This project is licensed under the MIT License.
 For issues and questions:
 - Check the troubleshooting section above
 - Review the API documentation
+- Check the security documentation
 - Open an issue on GitHub

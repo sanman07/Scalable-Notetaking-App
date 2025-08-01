@@ -1,207 +1,159 @@
-import time
-import logging
-from functools import wraps
-from typing import Callable, Any
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
-from opentelemetry import trace, metrics
-from opentelemetry.exporter.jaeger.thrift import JaegerExporter
-from opentelemetry.exporter.prometheus import PrometheusMetricReader
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
-from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
-from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.resources import Resource
+"""
+Monitoring utilities for microservices
+Provides Prometheus metrics and OpenTelemetry tracing
+"""
+
 import os
+from typing import Optional
 
-# Prometheus Metrics
-REQUEST_COUNT = Counter(
-    'http_requests_total',
-    'Total HTTP requests',
-    ['method', 'endpoint', 'status']
-)
+# Try to import monitoring libraries, with fallbacks
+try:
+    import prometheus_client
+    from prometheus_client import Counter, Histogram, Gauge
+    PROMETHEUS_AVAILABLE = True
+except ImportError:
+    PROMETHEUS_AVAILABLE = False
+    # Don't print warning here to avoid spam
 
-REQUEST_DURATION = Histogram(
-    'http_request_duration_seconds',
-    'HTTP request duration in seconds',
-    ['method', 'endpoint']
-)
+try:
+    import opentelemetry
+    from opentelemetry import trace
+    from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+    from opentelemetry.exporter.prometheus import PrometheusExporter
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+    from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+    from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.resources import Resource
+    OPENTELEMETRY_AVAILABLE = True
+except ImportError:
+    OPENTELEMETRY_AVAILABLE = False
+    # Don't print warning here to avoid spam
 
-ACTIVE_CONNECTIONS = Gauge(
-    'active_connections',
-    'Number of active connections'
-)
-
-DATABASE_CONNECTIONS = Gauge(
-    'database_connections_active',
-    'Number of active database connections'
-)
-
-BUSINESS_METRICS = {
-    'notes_created_total': Counter(
+# Metrics (only if prometheus_client is available)
+if PROMETHEUS_AVAILABLE:
+    # Request metrics
+    REQUEST_COUNT = Counter(
+        'http_requests_total',
+        'Total HTTP requests',
+        ['method', 'endpoint', 'status']
+    )
+    
+    REQUEST_DURATION = Histogram(
+        'http_request_duration_seconds',
+        'HTTP request duration in seconds',
+        ['method', 'endpoint']
+    )
+    
+    # Database metrics
+    DB_CONNECTION_GAUGE = Gauge(
+        'database_connections_active',
+        'Number of active database connections'
+    )
+    
+    DB_QUERY_DURATION = Histogram(
+        'database_query_duration_seconds',
+        'Database query duration in seconds',
+        ['operation']
+    )
+    
+    # Business metrics
+    NOTES_CREATED = Counter(
         'notes_created_total',
         'Total number of notes created'
-    ),
-    'notes_updated_total': Counter(
-        'notes_updated_total',
-        'Total number of notes updated'
-    ),
-    'notes_deleted_total': Counter(
-        'notes_deleted_total',
-        'Total number of notes deleted'
-    ),
-    'folders_created_total': Counter(
+    )
+    
+    FOLDERS_CREATED = Counter(
         'folders_created_total',
         'Total number of folders created'
-    ),
-    'folders_updated_total': Counter(
-        'folders_updated_total',
-        'Total number of folders updated'
-    ),
-    'folders_deleted_total': Counter(
-        'folders_deleted_total',
-        'Total number of folders deleted'
     )
-}
+    
+    USERS_REGISTERED = Counter(
+        'users_registered_total',
+        'Total number of users registered'
+    )
+else:
+    # Dummy metrics for when prometheus_client is not available
+    class DummyMetric:
+        def inc(self, *args, **kwargs): pass
+        def observe(self, *args, **kwargs): pass
+        def set(self, *args, **kwargs): pass
+    
+    REQUEST_COUNT = DummyMetric()
+    REQUEST_DURATION = DummyMetric()
+    DB_CONNECTION_GAUGE = DummyMetric()
+    DB_QUERY_DURATION = DummyMetric()
+    NOTES_CREATED = DummyMetric()
+    FOLDERS_CREATED = DummyMetric()
+    USERS_REGISTERED = DummyMetric()
 
-logger = logging.getLogger(__name__)
+def setup_monitoring(app, service_name: str):
+    """Setup monitoring for a FastAPI application"""
+    
+    # Setup OpenTelemetry tracing
+    if OPENTELEMETRY_AVAILABLE:
+        setup_tracing(service_name)
+        FastAPIInstrumentor.instrument_app(app)
+    
+    # Setup Prometheus metrics endpoint
+    if PROMETHEUS_AVAILABLE:
+        from prometheus_client import make_asgi_app
+        metrics_app = make_asgi_app()
+        app.mount("/metrics", metrics_app)
 
-def setup_tracing(service_name: str, jaeger_endpoint: str = None):
+def setup_tracing(service_name: str):
     """Setup OpenTelemetry tracing"""
-    if not jaeger_endpoint:
-        jaeger_endpoint = os.getenv("JAEGER_ENDPOINT", "http://jaeger:14268/api/traces")
+    if not OPENTELEMETRY_AVAILABLE:
+        return
     
-    # Create resource
-    resource = Resource.create({
-        "service.name": service_name,
-        "service.version": "1.0.0"
-    })
-    
-    # Setup tracer provider
-    trace.set_tracer_provider(TracerProvider(resource=resource))
-    tracer_provider = trace.get_tracer_provider()
+    # Create tracer provider
+    resource = Resource.create({"service.name": service_name})
+    tracer_provider = TracerProvider(resource=resource)
     
     # Setup Jaeger exporter
+    jaeger_endpoint = os.getenv("JAEGER_ENDPOINT", "http://localhost:14268/api/traces")
     jaeger_exporter = JaegerExporter(
-        endpoint=jaeger_endpoint,
+        collector_endpoint=jaeger_endpoint
     )
     
     # Add span processor
-    span_processor = BatchSpanProcessor(jaeger_exporter)
-    tracer_provider.add_span_processor(span_processor)
+    tracer_provider.add_span_processor(
+        BatchSpanProcessor(jaeger_exporter)
+    )
     
-    return trace.get_tracer(service_name)
+    # Set global tracer provider
+    trace.set_tracer_provider(tracer_provider)
 
-def setup_metrics():
-    """Setup Prometheus metrics"""
-    # Setup metrics provider
-    resource = Resource.create({
-        "service.name": os.getenv("SERVICE_NAME", "unknown-service"),
-        "service.version": "1.0.0"
-    })
-    
-    # Use PrometheusMetricReader
-    metric_reader = PrometheusMetricReader()
-    metrics.set_meter_provider(MeterProvider(resource=resource, metric_readers=[metric_reader]))
-    
-    return metrics.get_meter(__name__)
+def instrument_database(engine):
+    """Instrument SQLAlchemy engine for monitoring"""
+    if OPENTELEMETRY_AVAILABLE:
+        SQLAlchemyInstrumentor().instrument(engine=engine)
 
-def instrument_fastapi_app(app, service_name: str):
-    """Instrument FastAPI app with OpenTelemetry"""
-    # Setup tracing
-    tracer = setup_tracing(service_name)
-    
-    # Instrument FastAPI
-    FastAPIInstrumentor.instrument_app(app, tracer_provider=trace.get_tracer_provider())
-    
-    # Instrument SQLAlchemy
-    SQLAlchemyInstrumentor().instrument()
-    
-    # Instrument HTTPX (for API Gateway)
-    HTTPXClientInstrumentor().instrument()
-    
-    return tracer
+def instrument_http_client():
+    """Instrument HTTP client for monitoring"""
+    if OPENTELEMETRY_AVAILABLE:
+        HTTPXClientInstrumentor().instrument()
 
-def track_request_metrics(func: Callable) -> Callable:
-    """Decorator to track request metrics"""
-    @wraps(func)
-    async def wrapper(*args, **kwargs):
-        start_time = time.time()
-        
-        # Extract request info
-        request = kwargs.get('request') or (args[0] if args else None)
-        method = getattr(request, 'method', 'unknown') if request else 'unknown'
-        endpoint = getattr(request, 'url', {}).path if request else 'unknown'
-        
-        try:
-            # Execute the function
-            result = await func(*args, **kwargs)
-            status = getattr(result, 'status_code', 200) if hasattr(result, 'status_code') else 200
-            
-            # Record metrics
-            REQUEST_COUNT.labels(method=method, endpoint=endpoint, status=status).inc()
-            REQUEST_DURATION.labels(method=method, endpoint=endpoint).observe(time.time() - start_time)
-            
-            return result
-            
-        except Exception as e:
-            # Record error metrics
-            REQUEST_COUNT.labels(method=method, endpoint=endpoint, status=500).inc()
-            REQUEST_DURATION.labels(method=method, endpoint=endpoint).observe(time.time() - start_time)
-            raise
-            
-    return wrapper
+def record_request_metrics(method: str, endpoint: str, status_code: int, duration: float):
+    """Record HTTP request metrics"""
+    REQUEST_COUNT.inc(method=method, endpoint=endpoint, status=str(status_code))
+    REQUEST_DURATION.observe(duration, method=method, endpoint=endpoint)
 
-def track_business_metric(metric_name: str, labels: dict = None):
-    """Track business metrics"""
-    if metric_name in BUSINESS_METRICS:
-        if labels:
-            BUSINESS_METRICS[metric_name].labels(**labels).inc()
-        else:
-            BUSINESS_METRICS[metric_name].inc()
+def record_database_metrics(operation: str, duration: float):
+    """Record database operation metrics"""
+    DB_QUERY_DURATION.observe(duration, operation=operation)
 
-def get_metrics_handler():
-    """Get Prometheus metrics handler for FastAPI"""
-    async def metrics():
-        return generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST}
-    return metrics
+def record_business_metrics(metric_type: str, value: int = 1):
+    """Record business metrics"""
+    if metric_type == "notes_created":
+        NOTES_CREATED.inc(value)
+    elif metric_type == "folders_created":
+        FOLDERS_CREATED.inc(value)
+    elif metric_type == "users_registered":
+        USERS_REGISTERED.inc(value)
 
-class MetricsMiddleware:
-    """Middleware for automatic request tracking"""
-    
-    def __init__(self, app):
-        self.app = app
-    
-    async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
-            await self.app(scope, receive, send)
-            return
-        
-        start_time = time.time()
-        method = scope["method"]
-        path = scope["path"]
-        
-        # Increment active connections
-        ACTIVE_CONNECTIONS.inc()
-        
-        async def send_wrapper(message):
-            if message["type"] == "http.response.start":
-                status = message["status"]
-                REQUEST_COUNT.labels(method=method, endpoint=path, status=status).inc()
-                REQUEST_DURATION.labels(method=method, endpoint=path).observe(time.time() - start_time)
-            await send(message)
-        
-        try:
-            await self.app(scope, receive, send_wrapper)
-        finally:
-            # Decrement active connections
-            ACTIVE_CONNECTIONS.dec()
-
-def create_custom_span(tracer, name: str, attributes: dict = None):
-    """Create a custom span for tracing"""
-    span = tracer.start_span(name)
-    if attributes:
-        for key, value in attributes.items():
-            span.set_attribute(key, value)
-    return span 
+def update_db_connection_count(count: int):
+    """Update database connection count"""
+    DB_CONNECTION_GAUGE.set(count) 

@@ -15,6 +15,8 @@ RUN apt-get update \
         gcc \
         g++ \
         unixodbc-dev \
+        gnupg \
+        lsb-release \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Microsoft ODBC Driver for SQL Server

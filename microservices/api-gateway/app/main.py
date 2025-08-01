@@ -7,16 +7,6 @@ from datetime import datetime
 from typing import Dict, Any
 import logging
 
-# Import shared monitoring components
-import sys
-sys.path.append(os.path.join(os.path.dirname(__file__), '../../shared'))
-
-from utils.monitoring import (
-    instrument_fastapi_app, MetricsMiddleware, track_business_metric,
-    create_custom_span
-)
-from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,13 +16,6 @@ app = FastAPI(
     description="API Gateway for the Notes microservices application",
     version="1.0.0"
 )
-
-# Setup monitoring
-os.environ["SERVICE_NAME"] = "api-gateway"
-tracer = instrument_fastapi_app(app, "api-gateway")
-
-# Add metrics middleware
-app.add_middleware(MetricsMiddleware)
 
 # CORS middleware
 app.add_middleware(
@@ -44,8 +27,8 @@ app.add_middleware(
 )
 
 # Service URLs
-NOTES_SERVICE_URL = os.getenv("NOTES_SERVICE_URL", "http://localhost:8001")
-FOLDERS_SERVICE_URL = os.getenv("FOLDERS_SERVICE_URL", "http://localhost:8002")
+NOTES_SERVICE_URL = os.getenv("NOTES_SERVICE_URL", "http://notes-service:8001")
+FOLDERS_SERVICE_URL = os.getenv("FOLDERS_SERVICE_URL", "http://folders-service:8002")
 
 class ServiceRegistry:
     """Simple service registry for microservices"""
@@ -65,21 +48,13 @@ class ServiceRegistry:
         if not url:
             return False
         
-        with tracer.start_as_current_span(f"health_check_{service_name}") as span:
-            span.set_attribute("service_name", service_name)
-            span.set_attribute("service_url", url)
-            
-            try:
-                async with httpx.AsyncClient() as client:
-                    response = await client.get(f"{url}/health", timeout=5.0)
-                    is_healthy = response.status_code == 200
-                    span.set_attribute("is_healthy", is_healthy)
-                    return is_healthy
-            except Exception as e:
-                logger.error(f"Health check failed for {service_name}: {e}")
-                span.set_attribute("is_healthy", False)
-                span.set_attribute("error", str(e))
-                return False
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(f"{url}/health", timeout=5.0)
+                return response.status_code == 200
+        except Exception as e:
+            logger.error(f"Health check failed for {service_name}: {e}")
+            return False
 
 service_registry = ServiceRegistry()
 
@@ -90,140 +65,103 @@ async def proxy_request(
     method: str = "GET"
 ) -> JSONResponse:
     """Proxy request to the appropriate microservice"""
-    with tracer.start_as_current_span(f"proxy_to_{service_name}") as span:
-        span.set_attribute("service_name", service_name)
-        span.set_attribute("path", path)
-        span.set_attribute("method", method)
-        
-        service_url = service_registry.get_service_url(service_name)
-        if not service_url:
-            span.set_attribute("service_available", False)
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Service {service_name} not available"
+    import time
+    start_time = time.time()
+    
+    service_url = service_registry.get_service_url(service_name)
+    if not service_url:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Service {service_name} not available"
+        )
+    
+    # Get request body
+    body = None
+    if method in ["POST", "PUT", "PATCH"]:
+        body = await request.body()
+    
+    # Get headers
+    headers = dict(request.headers)
+    # Remove host header to avoid conflicts
+    headers.pop("host", None)
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.request(
+                method=method,
+                url=f"{service_url}{path}",
+                headers=headers,
+                content=body,
+                params=request.query_params,
+                timeout=30.0
             )
-        
-        span.set_attribute("service_available", True)
-        url = f"{service_url}{path}"
-        span.set_attribute("target_url", url)
-        
-        # Extract request data
-        headers = dict(request.headers)
-        # Remove host header to avoid conflicts
-        headers.pop("host", None)
-        
-        try:
-            async with httpx.AsyncClient() as client:
-                if method.upper() == "GET":
-                    response = await client.get(
-                        url,
-                        headers=headers,
-                        params=request.query_params,
-                        timeout=30.0
-                    )
-                elif method.upper() == "POST":
-                    body = await request.body()
-                    response = await client.post(
-                        url,
-                        headers=headers,
-                        content=body,
-                        timeout=30.0
-                    )
-                elif method.upper() == "PUT":
-                    body = await request.body()
-                    response = await client.put(
-                        url,
-                        headers=headers,
-                        content=body,
-                        timeout=30.0
-                    )
-                elif method.upper() == "DELETE":
-                    response = await client.delete(
-                        url,
-                        headers=headers,
-                        timeout=30.0
-                    )
-                else:
-                    span.set_attribute("unsupported_method", True)
-                    raise HTTPException(
-                        status_code=status.HTTP_405_METHOD_NOT_ALLOWED,
-                        detail=f"Method {method} not supported"
-                    )
-                
-                span.set_attribute("response_status", response.status_code)
-                span.set_attribute("response_size", len(response.content))
-                
-                # Return response
-                return JSONResponse(
-                    content=response.json() if response.content else {},
-                    status_code=response.status_code,
-                    headers=dict(response.headers)
-                )
-                
-        except httpx.TimeoutException:
-            span.set_attribute("timeout", True)
-            raise HTTPException(
-                status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-                detail=f"Service {service_name} timeout"
+            
+            # Return response
+            return JSONResponse(
+                content=response.json() if response.headers.get("content-type", "").startswith("application/json") else response.text,
+                status_code=response.status_code,
+                headers=dict(response.headers)
             )
-        except httpx.RequestError as e:
-            logger.error(f"Request error to {service_name}: {e}")
-            span.set_attribute("request_error", True)
-            span.set_attribute("error", str(e))
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Service {service_name} unavailable"
-            )
-        except Exception as e:
-            logger.error(f"Unexpected error proxying to {service_name}: {e}")
-            span.set_attribute("unexpected_error", True)
-            span.set_attribute("error", str(e))
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Internal server error"
-            )
+            
+    except httpx.TimeoutException:
+        logger.error(f"Timeout when calling {service_name} service")
+        raise HTTPException(
+            status_code=504,
+            detail=f"Service {service_name} timeout"
+        )
+    except httpx.RequestError as e:
+        logger.error(f"Error calling {service_name} service: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Service {service_name} unavailable"
+        )
 
-@app.get("/metrics")
-async def metrics():
-    """Prometheus metrics endpoint"""
-    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
-
-# Gateway health check
 @app.get("/health")
 async def gateway_health():
-    """Health check for the API Gateway"""
-    with tracer.start_as_current_span("gateway_health_check") as span:
-        service_health = {}
-        
-        for service_name in service_registry.services.keys():
-            service_health[service_name] = await service_registry.health_check_service(service_name)
-        
-        all_healthy = all(service_health.values())
-        span.set_attribute("all_services_healthy", all_healthy)
-        span.set_attribute("healthy_services", sum(service_health.values()))
-        span.set_attribute("total_services", len(service_health))
-        
-        return {
-            "status": "healthy" if all_healthy else "degraded",
-            "timestamp": datetime.utcnow(),
-            "service": "api-gateway",
-            "version": "1.0.0",
-            "services": service_health
+    """Health check for the API gateway"""
+    health_status = {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "service": "api-gateway",
+        "version": "1.0.0",
+        "services": {}
+    }
+    
+    # Check downstream services
+    for service_name in ["notes", "folders"]:
+        is_healthy = await service_registry.health_check_service(service_name)
+        health_status["services"][service_name] = {
+            "status": "healthy" if is_healthy else "unhealthy",
+            "url": service_registry.get_service_url(service_name)
         }
+    
+    # Overall status
+    all_healthy = all(
+        service["status"] == "healthy" 
+        for service in health_status["services"].values()
+    )
+    
+    if not all_healthy:
+        health_status["status"] = "degraded"
+    
+    return health_status
 
-# Root endpoint
 @app.get("/")
 async def root():
+    """Root endpoint"""
     return {
         "message": "Notes App API Gateway",
         "version": "1.0.0",
-        "services": list(service_registry.services.keys())
+        "services": {
+            "notes": f"{NOTES_SERVICE_URL}/docs",
+            "folders": f"{FOLDERS_SERVICE_URL}/docs"
+        }
     }
 
-# Notes service routes
+# Notes service endpoints
 @app.get("/api/notes")
 async def get_notes(request: Request):
-    return await proxy_request(request, "notes", "/notes", "GET")
+    return await proxy_request(request, "notes", "/notes")
 
 @app.post("/api/notes")
 async def create_note(request: Request):
@@ -231,7 +169,7 @@ async def create_note(request: Request):
 
 @app.get("/api/notes/{note_id}")
 async def get_note(note_id: int, request: Request):
-    return await proxy_request(request, "notes", f"/notes/{note_id}", "GET")
+    return await proxy_request(request, "notes", f"/notes/{note_id}")
 
 @app.put("/api/notes/{note_id}")
 async def update_note(note_id: int, request: Request):
@@ -241,10 +179,10 @@ async def update_note(note_id: int, request: Request):
 async def delete_note(note_id: int, request: Request):
     return await proxy_request(request, "notes", f"/notes/{note_id}", "DELETE")
 
-# Folders service routes
+# Folders service endpoints
 @app.get("/api/folders")
 async def get_folders(request: Request):
-    return await proxy_request(request, "folders", "/folders", "GET")
+    return await proxy_request(request, "folders", "/folders")
 
 @app.post("/api/folders")
 async def create_folder(request: Request):
@@ -252,7 +190,7 @@ async def create_folder(request: Request):
 
 @app.get("/api/folders/{folder_id}")
 async def get_folder(folder_id: int, request: Request):
-    return await proxy_request(request, "folders", f"/folders/{folder_id}", "GET")
+    return await proxy_request(request, "folders", f"/folders/{folder_id}")
 
 @app.put("/api/folders/{folder_id}")
 async def update_folder(folder_id: int, request: Request):
@@ -264,30 +202,20 @@ async def delete_folder(folder_id: int, request: Request):
 
 @app.get("/api/folders/{folder_id}/children")
 async def get_folder_children(folder_id: int, request: Request):
-    return await proxy_request(request, "folders", f"/folders/{folder_id}/children", "GET")
+    return await proxy_request(request, "folders", f"/folders/{folder_id}/children")
 
-# Service discovery endpoint
 @app.get("/api/services")
 async def get_services():
-    """Get available services and their health status"""
-    with tracer.start_as_current_span("service_discovery") as span:
-        services_info = {}
-        
-        for service_name, service_url in service_registry.services.items():
-            is_healthy = await service_registry.health_check_service(service_name)
-            services_info[service_name] = {
-                "url": service_url,
-                "healthy": is_healthy,
-                "status": "up" if is_healthy else "down"
+    """Get available services"""
+    return {
+        "services": {
+            name: {
+                "url": url,
+                "health": await service_registry.health_check_service(name)
             }
-        
-        span.set_attribute("total_services", len(services_info))
-        span.set_attribute("healthy_services", sum(1 for s in services_info.values() if s["healthy"]))
-        
-        return {
-            "services": services_info,
-            "timestamp": datetime.utcnow()
+            for name, url in service_registry.services.items()
         }
+    }
 
 if __name__ == "__main__":
     import uvicorn

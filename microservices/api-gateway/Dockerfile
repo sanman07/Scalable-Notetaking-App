@@ -15,12 +15,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
-COPY requirements.txt .
+COPY api-gateway/requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY app /app/app
+# Copy shared modules and application code
+COPY shared /app/shared
+COPY api-gateway/app /app/app
 
 # Create non-root user
 RUN adduser --disabled-password --gecos '' appuser \

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database
   database:
@@ -25,8 +23,8 @@ services:
   # Notes Service
   notes-service:
     build:
-      context: ../microservices/notes-service
-      dockerfile: Dockerfile
+      context: ../microservices
+      dockerfile: notes-service/Dockerfile
     container_name: notes-service
     environment:
       DATABASE_URL: postgresql+asyncpg://notesuser:notespassword@database:5432/notesdb
@@ -50,8 +48,8 @@ services:
   # Folders Service
   folders-service:
     build:
-      context: ../microservices/folders-service
-      dockerfile: Dockerfile
+      context: ../microservices
+      dockerfile: folders-service/Dockerfile
     container_name: folders-service
     environment:
       DATABASE_URL: postgresql+asyncpg://notesuser:notespassword@database:5432/notesdb
@@ -75,8 +73,8 @@ services:
   # API Gateway
   api-gateway:
     build:
-      context: ../microservices/api-gateway
-      dockerfile: Dockerfile
+      context: ../microservices
+      dockerfile: api-gateway/Dockerfile
     container_name: api-gateway
     environment:
       NOTES_SERVICE_URL: http://notes-service:8001

@@ -163,9 +163,23 @@ python main.py
    ```bash
    # Build images with your registry
    ./scripts/build-images.sh v1.0.0 your-registry.com/your-project
+   
+   # For local testing (no registry push)
+   ./scripts/build-images.sh v1.0.0 localhost:5000/notes
    ```
 
-2. **Deploy to development**
+2. **Update image references** (if using custom registry)
+   ```bash
+   # Update k8s/base/backend-deployment.yaml
+   # Change: image: notes-backend:latest
+   # To: image: your-registry.com/your-project/notes-backend:v1.0.0
+   
+   # Update k8s/base/frontend-deployment.yaml  
+   # Change: image: notes-frontend:latest
+   # To: image: your-registry.com/your-project/notes-frontend:v1.0.0
+   ```
+
+3. **Deploy to development**
    ```bash
    # Deploy to development environment
    kubectl apply -k k8s/overlays/development
@@ -174,7 +188,7 @@ python main.py
    ./scripts/deploy-k8s.sh development
    ```
 
-3. **Deploy to production**
+4. **Deploy to production**
    ```bash
    # Deploy to production environment
    kubectl apply -k k8s/overlays/production
@@ -183,7 +197,7 @@ python main.py
    ./scripts/deploy-k8s.sh production
    ```
 
-4. **Access the application**
+5. **Access the application**
    ```bash
    # Port forward to access locally
    kubectl port-forward service/dev-frontend-service 8080:80 -n notes-app-dev
@@ -269,6 +283,31 @@ kubectl get hpa -n notes-app
 For detailed Kubernetes deployment instructions, see:
 - **Kustomize Guide**: [k8s/README.md](k8s/README.md)
 - **Helm Guide**: [helm/notes-app/README.md](helm/notes-app/README.md)
+
+### Local Testing Without Registry
+
+For local development and testing, you can use the built images directly:
+
+```bash
+# 1. Build images locally (no push)
+./scripts/build-images.sh v1.0.0 localhost:5000/notes
+
+# 2. Update Kubernetes manifests to use local images
+# Edit k8s/base/backend-deployment.yaml:
+#   image: localhost:5000/notes/notes-backend:v1.0.0
+#   imagePullPolicy: Never
+
+# Edit k8s/base/frontend-deployment.yaml:
+#   image: localhost:5000/notes/notes-frontend:v1.0.0  
+#   imagePullPolicy: Never
+
+# 3. Deploy to local cluster
+kubectl apply -k k8s/overlays/development
+
+# 4. Access the application
+kubectl port-forward service/dev-frontend-service 8080:80 -n notes-app-dev
+# Then visit: http://localhost:8080
+```
 
 ## API Endpoints
 
